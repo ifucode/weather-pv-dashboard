@@ -1,0 +1,6 @@
+.github_token
+dist/
+__pycache__/
+*.pyc
+.venv/
+.workbuddy/
