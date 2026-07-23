@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>天气 · 光伏发电效率看板</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --panel:#ffffff; --line:#e6eaf2; --ink:#1f2740; --sub:#6b7488;
+    --brand:#2563eb; --brand-soft:#eaf1ff;
+    --excellent:#16a34a; --good:#65a30d; --fair:#eab308; --poor:#f97316; --bad:#dc2626;
+    --shadow:0 2px 10px rgba(30,45,90,.06),0 8px 28px rgba(30,45,90,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Microsoft YaHei","PingFang SC",system-ui,-apple-system,Segoe UI,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:40px}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 20px}
+  header{background:linear-gradient(120deg,#2563eb,#4f46e5);color:#fff;padding:26px 0 30px;
+    box-shadow:0 6px 24px rgba(37,99,235,.25);margin-bottom:24px}
+  header .wrap{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  header h1{font-size:24px;font-weight:800;letter-spacing:.5px;display:flex;align-items:center;gap:10px}
+  header .meta{font-size:13px;opacity:.92;text-align:right}
+  header .meta b{font-size:15px}
+  .tabs{display:flex;gap:8px;margin:0 0 20px}
+  .tab{padding:9px 20px;border-radius:10px;background:var(--panel);border:1px solid var(--line);
+    cursor:pointer;font-size:14px;font-weight:600;color:var(--sub);transition:.15s}
+  .tab.active{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 4px 12px rgba(37,99,235,.28)}
+
+  /* summary cards */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+  .stat .lbl{font-size:12px;color:var(--sub);margin-bottom:6px}
+  .stat .val{font-size:26px;font-weight:800}
+  .stat .val small{font-size:13px;font-weight:600;color:var(--sub)}
+
+  /* city grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;
+    box-shadow:var(--shadow);cursor:pointer;transition:.18s;position:relative;overflow:hidden}
+  .card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(30,45,90,.13)}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+  .card .cname{font-size:19px;font-weight:800}
+  .card .prov{font-size:12px;color:var(--sub);margin-top:2px}
+  .card .wx{text-align:right}
+  .card .wx .ic{font-size:34px;line-height:1}
+  .card .wx .d{font-size:13px;color:var(--sub);margin-top:2px}
+  .card .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px}
+  .temp{font-size:14px;color:var(--sub)}
+  .temp b{color:var(--ink);font-size:15px}
+  .badge{padding:5px 12px;border-radius:20px;font-size:13px;font-weight:800;color:#fff}
+  .eff-wrap{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+  .eff-line{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-bottom:6px}
+  .bar{height:9px;border-radius:6px;background:#eef1f7;overflow:hidden}
+  .bar>i{display:block;height:100%;border-radius:6px}
+  .kwh{font-size:13px;color:var(--sub);margin-top:8px;display:flex;justify-content:space-between}
+  .kwh b{color:var(--brand);font-size:15px}
+  .strip{display:flex;gap:2px;margin-top:12px;overflow-x:auto;padding-bottom:2px}
+  .cell{flex:0 0 auto;text-align:center;font-size:10px;color:var(--sub);min-width:30px}
+  .cell .h{font-weight:600}
+  .cell .i{font-size:15px;margin:1px 0}
+  .cell .t{color:var(--ink);font-weight:600}
+
+  /* detail */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow);margin-bottom:18px}
+  .ctrls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  select{padding:9px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;color:var(--ink);cursor:pointer;font-weight:600}
+  .ph{font-size:16px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 8px;text-align:center;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:700;font-size:12px;background:#fafbfe}
+  td.hl{font-weight:700}
+  .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:6px}
+  .mini .b{background:var(--brand-soft);border-radius:12px;padding:14px;text-align:center}
+  .mini .b .l{font-size:12px;color:var(--sub)}
+  .mini .b .v{font-size:22px;font-weight:800;color:var(--brand);margin-top:3px}
+  .empty{text-align:center;color:var(--sub);padding:50px 0;font-size:15px}
+  .foot{text-align:center;color:var(--sub);font-size:12px;margin-top:24px;line-height:1.8}
+  svg text{font-family:inherit}
+  @media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}.mini{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>⚡ 天气 · 光伏发电效率看板</h1>
+    <div class="meta">监测时段 <b>06:00 – 18:00</b><br><span id="hd-date"></span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tabs">
+    <div class="tab active" data-v="home" onclick="switchTab('home')">🏙️ 全部城市（当天）</div>
+    <div class="tab" data-v="detail" onclick="switchTab('detail')">🔎 单城市历史查询</div>
+  </div>
+
+  <!-- HOME -->
+  <div id="view-home">
+    <div class="stats" id="stats"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- DETAIL -->
+  <div id="view-detail" style="display:none">
+    <div class="panel">
+      <div class="ctrls">
+        <span style="font-weight:700">选择城市</span>
+        <select id="sel-city" onchange="renderDetail()"></select>
+        <span style="font-weight:700">选择日期</span>
+        <select id="sel-date" onchange="renderDetail()"></select>
+      </div>
+      <div id="detail-body"></div>
+    </div>
+    <div class="panel">
+      <div class="ph">📈 历史趋势（发电效率 & 预计发电量）</div>
+      <div id="history-chart"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    数据来源：Open-Meteo 气象与太阳辐照 · 光伏效率基于辐照(GHI)+温度修正+系统损耗测算<br>
+    每日自动更新 · 数据本地存储于 <code>data/</code> 目录
+  </div>
+</div>
+
+<script src="./data/data.js"></script>
+<script>
+const DATA = window.WEATHER_DATA || {};
+const LATEST = window.LATEST_DATE || Object.keys(DATA).sort().pop();
+const RLEVELS={excellent:'--excellent',good:'--good',fair:'--fair',poor:'--poor',bad:'--bad'};
+function effColor(pct){
+  if(pct>=85)return getCss('--excellent');
+  if(pct>=65)return getCss('--good');
+  if(pct>=45)return getCss('--fair');
+  if(pct>=25)return getCss('--poor');
+  return getCss('--bad');
+}
+function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+
+document.getElementById('hd-date').textContent = '数据日期 '+(LATEST||'--');
+
+function switchTab(v){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.v===v));
+  document.getElementById('view-home').style.display = v==='home'?'':'none';
+  document.getElementById('view-detail').style.display = v==='detail'?'':'none';
+}
+
+/* ---------- HOME ---------- */
+function renderHome(){
+  const recs = DATA[LATEST]||[];
+  const grid=document.getElementById('grid'), stats=document.getElementById('stats');
+  if(!recs.length){grid.innerHTML='<div class="empty">暂无当天数据，请先运行抓取脚本。</div>';return;}
+
+  const avgEff=(recs.reduce((s,r)=>s+r.pv.weather_efficiency_pct,0)/recs.length).toFixed(1);
+  const avgKwh=(recs.reduce((s,r)=>s+r.pv.energy_kwh_per_kwp,0)/recs.length).toFixed(2);
+  const best=recs.reduce((a,b)=>a.pv.weather_efficiency_pct>=b.pv.weather_efficiency_pct?a:b);
+  const worst=recs.reduce((a,b)=>a.pv.weather_efficiency_pct<=b.pv.weather_efficiency_pct?a:b);
+  stats.innerHTML=`
+    <div class="stat"><div class="lbl">监测城市</div><div class="val">${recs.length}<small> 个</small></div></div>
+    <div class="stat"><div class="lbl">平均发电效率</div><div class="val" style="color:${effColor(avgEff)}">${avgEff}<small>%</small></div></div>
+    <div class="stat"><div class="lbl">最佳城市</div><div class="val" style="font-size:20px">${best.city}<small> ${best.pv.weather_efficiency_pct}%</small></div></div>
+    <div class="stat"><div class="lbl">最弱城市</div><div class="val" style="font-size:20px">${worst.city}<small> ${worst.pv.weather_efficiency_pct}%</small></div></div>`;
+
+  grid.innerHTML = recs.map((r,i)=>{
+    const c=effColor(r.pv.weather_efficiency_pct);
+    const strip=r.hours.map(h=>`<div class="cell"><div class="h">${h.hour.slice(0,2)}</div><div class="i">${h.icon}</div><div class="t">${h.temp!=null?Math.round(h.temp)+'°':'-'}</div></div>`).join('');
+    return `<div class="card" onclick="goDetail('${r.city}')">
+      <div class="top">
+        <div><div class="cname">${r.city}</div><div class="prov">${r.province}</div></div>
+        <div class="wx"><div class="ic">${r.dominant_icon}</div><div class="d">${r.dominant_desc}</div></div>
+      </div>
+      <div class="row">
+        <span class="temp"><b>${r.temp_max??'-'}°</b> / ${r.temp_min??'-'}°C　💧${r.precip_total}mm</span>
+        <span class="badge" style="background:${c}">${r.pv.rating} · ${r.pv.weather_efficiency_pct}%</span>
+      </div>
+      <div class="eff-wrap">
+        <div class="eff-line"><span>光伏发电效率</span><span>${r.pv.weather_efficiency_pct}%</span></div>
+        <div class="bar"><i style="width:${r.pv.weather_efficiency_pct}%;background:${c}"></i></div>
+        <div class="kwh"><span>预计发电量（每kWp装机）</span><b>${r.pv.energy_kwh_per_kwp} kWh</b></div>
+      </div>
+      <div class="strip">${strip}</div>
+    </div>`;
+  }).join('');
+}
+
+function goDetail(city){
+  switchTab('detail');
+  document.getElementById('sel-city').value=city;
+  renderDetail();
+}
+
+/* ---------- DETAIL ---------- */
+function initDetail(){
+  const cities=new Set(); Object.values(DATA).forEach(day=>day.forEach(r=>cities.add(r.city)));
+  const dates=Object.keys(DATA).sort().reverse();
+  document.getElementById('sel-city').innerHTML=[...cities].map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('sel-date').innerHTML=dates.map(d=>`<option>${d}</option>`).join('');
+}
+
+function renderDetail(){
+  const city=document.getElementById('sel-city').value;
+  const date=document.getElementById('sel-date').value;
+  const rec=(DATA[date]||[]).find(r=>r.city===city);
+  const body=document.getElementById('detail-body');
+  if(!rec){body.innerHTML='<div class="empty">该城市在所选日期暂无数据。</div>';renderHistory(city);return;}
+  const c=effColor(rec.pv.weather_efficiency_pct);
+  const rows=rec.hours.map(h=>`<tr>
+      <td class="hl">${h.hour}</td>
+      <td>${h.icon} ${h.desc}</td>
+      <td>${h.temp!=null?h.temp+'°':'-'}</td>
+      <td>${h.humidity!=null?h.humidity+'%':'-'}</td>
+      <td>${h.cloud!=null?h.cloud+'%':'-'}</td>
+      <td>${h.precip} mm</td>
+      <td>${h.ghi!=null?Math.round(h.ghi):'-'}</td>
+      <td>${h.wind!=null?h.wind+' km/h':'-'}</td>
+      <td class="hl" style="color:${c}">${(h.ghi/1000*100).toFixed(0)}%</td>
+    </tr>`).join('');
+  body.innerHTML=`
+    <div class="ph">${rec.dominant_icon} ${rec.province} · ${rec.city}　<span style="font-size:13px;color:var(--sub);font-weight:500">${date} · ${rec.dominant_desc}</span></div>
+    <div class="mini">
+      <div class="b"><div class="l">发电效率</div><div class="v" style="color:${c}">${rec.pv.weather_efficiency_pct}%</div></div>
+      <div class="b"><div class="l">预计发电量 kWh/kWp</div><div class="v">${rec.pv.energy_kwh_per_kwp}</div></div>
+      <div class="b"><div class="l">气温范围</div><div class="v" style="font-size:18px">${rec.temp_min}~${rec.temp_max}°C</div></div>
+      <div class="b"><div class="l">累计降水</div><div class="v" style="font-size:18px">${rec.precip_total} mm</div></div>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>时刻</th><th>天气</th><th>温度</th><th>湿度</th><th>云量</th><th>降水</th><th>辐照 W/m²</th><th>风速</th><th>出力比</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  renderHistory(city);
+}
+
+/* SVG history chart: efficiency line + energy bars */
+function renderHistory(city){
+  const el=document.getElementById('history-chart');
+  const dates=Object.keys(DATA).sort();
+  const series=dates.map(d=>{const r=(DATA[d]||[]).find(x=>x.city===city);return r?{date:d,eff:r.pv.weather_efficiency_pct,kwh:r.pv.energy_kwh_per_kwp}:null}).filter(Boolean);
+  if(series.length<1){el.innerHTML='<div class="empty">暂无历史数据。随着每日更新，这里会显示趋势曲线。</div>';return;}
+
+  const W=Math.max(640,series.length*70), H=280, pad=44, bottom=H-36, top=20;
+  const maxKwh=Math.max(8,...series.map(s=>s.kwh));
+  const x=i=>pad+ (series.length===1? (W-2*pad)/2 : i*(W-2*pad)/(series.length-1));
+  const yEff=v=>top+(100-v)/100*(bottom-top);
+  const yKwh=v=>bottom-(v/maxKwh)*(bottom-top);
+  const bw=Math.min(34,(W-2*pad)/series.length*0.5);
+
+  let bars='',line='',dots='',lbls='',grid='';
+  [0,25,50,75,100].forEach(g=>{const y=yEff(g);grid+=`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#eef1f7"/><text x="${pad-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#9aa2b5">${g}%</text>`;});
+  series.forEach((s,i)=>{
+    const bx=x(i)-bw/2, by=yKwh(s.kwh);
+    bars+=`<rect x="${bx}" y="${by}" width="${bw}" height="${bottom-by}" rx="4" fill="#dbe6ff"><title>${s.date} 预计 ${s.kwh} kWh/kWp</title></rect>`;
+    const px=x(i), py=yEff(s.eff);
+    line+=(i?'L':'M')+px+' '+py+' ';
+    dots+=`<circle cx="${px}" cy="${py}" r="4" fill="${effColor(s.eff)}"><title>${s.date} 效率 ${s.eff}%</title></circle>`;
+    lbls+=`<text x="${px}" y="${H-14}" text-anchor="middle" font-size="10" fill="#6b7488">${s.date.slice(5)}</text>`;
+  });
+  el.innerHTML=`<div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    ${grid}${bars}
+    <path d="${line}" fill="none" stroke="#2563eb" stroke-width="2.5"/>
+    ${dots}${lbls}
+    <text x="${W-pad}" y="14" text-anchor="end" font-size="11" fill="#6b7488">柱=预计发电量 kWh/kWp　线=发电效率 %</text>
+  </svg></div>`;
+}
+
+/* init */
+renderHome();
+initDetail();
+renderDetail();
+</script>
+</body>
+</html>
