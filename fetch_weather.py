@@ -164,7 +164,8 @@ def compute_pv(hours, lat, lon, date_str):
     }
 
 
-def fetch_city(prov, city, date_str):
+def fetch_city_once(prov, city, date_str):
+    """单次抓取一个城市; 失败抛异常由上层重试。"""
     coord = CITY_COORDS.get(city) or geocode(city)
     if not coord:
         print(f"  跳过 {city}: 无法获取经纬度")
@@ -238,6 +239,24 @@ def fetch_city(prov, city, date_str):
     }
 
 
+def fetch_city(prov, city, date_str, retries=3):
+    """带重试的抓取; 全部失败返回 None(由 main 兜底填充)。"""
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            rec = fetch_city_once(prov, city, date_str)
+            if rec is not None:
+                return rec
+            return None  # 无数据(非网络错误), 不重试
+        except Exception as e:
+            last_err = e
+            print(f"  尝试 {attempt}/{retries} 失败 {city}: {e}")
+            if attempt < retries:
+                time.sleep(2 * attempt)
+    print(f"  {city} 全部重试失败: {last_err}")
+    return None
+
+
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     date_str = (sys.argv[1] if len(sys.argv) > 1
@@ -258,6 +277,27 @@ def main():
         except Exception as e:
             print(f"   失败: {e}")
         time.sleep(0.4)
+
+    # 失败兜底: 抓不到的城市, 用历史中最近一天的同城市数据补上, 保证城市不缺失
+    prev = {}
+    for fn in os.listdir(DATA_DIR):
+        if fn.endswith(".json") and fn != "all_data.json" and len(fn) == 15:
+            try:
+                with open(os.path.join(DATA_DIR, fn), encoding="utf-8") as f:
+                    obj = json.load(f)
+                prev[obj["date"]] = obj["records"]
+            except Exception:
+                pass
+    got = {r["city"] for r in records}
+    fallback_date = date_str if date_str in prev else (max(prev.keys()) if prev else None)
+    if fallback_date:
+        for rec in prev[fallback_date]:
+            if rec["city"] not in got:
+                rec = dict(rec)
+                rec["stale"] = True
+                rec["updated_at"] = f"{rec.get('updated_at','')} (兜底:沿用{fallback_date})"
+                records.append(rec)
+                print(f"   兜底填充 {rec['city']} (沿用 {fallback_date} 数据)")
 
     # 保存当日文件
     day_file = os.path.join(DATA_DIR, f"{date_str}.json")
