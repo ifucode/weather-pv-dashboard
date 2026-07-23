@@ -2,7 +2,7 @@ name: 每日天气光伏更新
 
 on:
   schedule:
-    - cron: "45 0 * * *"      # 北京时间 08:45 (UTC 00:45)
+    - cron: "0 22 * * *"      # 北京时间 06:00 (UTC 22:00 前一天)
   workflow_dispatch:          # 允许在 Actions 页面手动触发
 
 permissions:
