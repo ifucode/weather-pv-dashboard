@@ -59,6 +59,8 @@
   .cell .h{font-weight:600}
   .cell .i{font-size:15px;margin:1px 0}
   .cell .t{color:var(--ink);font-weight:600}
+  .stale-tag{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;
+    color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:20px;padding:2px 9px;margin-top:5px}
 
   /* detail */
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow);margin-bottom:18px}
@@ -118,7 +120,8 @@
 
   <div class="foot">
     数据来源：Open-Meteo 气象与太阳辐照 · 光伏效率基于辐照(GHI)+温度修正+系统损耗测算<br>
-    每日自动更新 · 数据本地存储于 <code>data/</code> 目录
+    每日自动更新 · 数据本地存储于 <code>data/</code> 目录<br>
+    <span style="color:#92400e">⚠️ 标记表示该城市当日抓取失败，看板自动沿用其最近一次成功数据（下次成功更新后自动刷新）</span>
   </div>
 </div>
 
@@ -135,6 +138,16 @@ function effColor(pct){
   return getCss('--bad');
 }
 function getCss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+
+/* 兜底数据标记: 当日抓取失败, 沿用最近一次成功数据 */
+function staleTag(r){
+  if(!r || (!r.stale && !r.stale_from)) return '';
+  let d = r.stale_from || '';
+  if(!d && r.updated_at){const m=r.updated_at.match(/沿用(\d{4}-\d{2}-\d{2})/);if(m)d=m[1];}
+  let md='';
+  if(d){const p=d.split('-');md=`${parseInt(p[1])}月${parseInt(p[2])}日`;}
+  return `<div class="stale-tag">⚠️ 数据沿用 ${md||d||'历史'}</div>`;
+}
 
 document.getElementById('hd-date').textContent = '数据日期 '+(LATEST||'--');
 
@@ -165,7 +178,7 @@ function renderHome(){
     const strip=r.hours.map(h=>`<div class="cell"><div class="h">${h.hour.slice(0,2)}</div><div class="i">${h.icon}</div><div class="t">${h.temp!=null?Math.round(h.temp)+'°':'-'}</div></div>`).join('');
     return `<div class="card" onclick="goDetail('${r.city}')">
       <div class="top">
-        <div><div class="cname">${r.city}</div><div class="prov">${r.province}</div></div>
+        <div><div class="cname">${r.city}</div><div class="prov">${r.province}</div>${staleTag(r)}</div>
         <div class="wx"><div class="ic">${r.dominant_icon}</div><div class="d">${r.dominant_desc}</div></div>
       </div>
       <div class="row">
@@ -215,7 +228,7 @@ function renderDetail(){
       <td class="hl" style="color:${c}">${(h.ghi/1000*100).toFixed(0)}%</td>
     </tr>`).join('');
   body.innerHTML=`
-    <div class="ph">${rec.dominant_icon} ${rec.province} · ${rec.city}　<span style="font-size:13px;color:var(--sub);font-weight:500">${date} · ${rec.dominant_desc}</span></div>
+    <div class="ph">${rec.dominant_icon} ${rec.province} · ${rec.city}　<span style="font-size:13px;color:var(--sub);font-weight:500">${date} · ${rec.dominant_desc}</span>${staleTag(rec)}</div>
     <div class="mini">
       <div class="b"><div class="l">发电效率</div><div class="v" style="color:${c}">${rec.pv.weather_efficiency_pct}%</div></div>
       <div class="b"><div class="l">预计发电量 kWh/kWp</div><div class="v">${rec.pv.energy_kwh_per_kwp}</div></div>
