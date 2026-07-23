@@ -295,7 +295,7 @@ def main():
             if rec["city"] not in got:
                 rec = dict(rec)
                 rec["stale"] = True
-                rec["updated_at"] = f"{rec.get('updated_at','')} (兜底:沿用{fallback_date})"
+                rec["stale_from"] = fallback_date
                 records.append(rec)
                 print(f"   兜底填充 {rec['city']} (沿用 {fallback_date} 数据)")
 
