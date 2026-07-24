@@ -259,8 +259,10 @@ def fetch_city(prov, city, date_str, retries=3):
 
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
+    # 使用北京时间(UTC+8)确定"今天"，避免云端 runner 默认 UTC 时区在凌晨 cron 时抓到前一天数据
+    today_bj = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")
     date_str = (sys.argv[1] if len(sys.argv) > 1
-                else datetime.date.today().isoformat())
+                else today_bj)
     print(f"抓取日期: {date_str}")
 
     cities = read_cities()
