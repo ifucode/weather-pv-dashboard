@@ -12,6 +12,7 @@ import json
 import math
 import datetime
 import time
+import re
 
 import requests
 
@@ -257,6 +258,36 @@ def fetch_city(prov, city, date_str, retries=5):
     return None
 
 
+def bump_index_html_version(latest_date):
+    """把 index.html 里 data.js 的加载加上 ?v=YYYYMMDD, 每次更新强制浏览器拉最新。
+
+    仅当版本号变化时才改写文件, 避免无谓改动。
+    """
+    html_path = os.path.join(BASE_DIR, "index.html")
+    if not os.path.exists(html_path):
+        return
+    try:
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+    except Exception:
+        return
+    ver = latest_date.replace("-", "")
+    new_tag = f'<script src="./data/data.js?v={ver}"></script>'
+    # 替换旧的 data.js 引用(可能带或不带 ?v=)
+    new_html, n = re.subn(
+        r'<script src="\./data/data\.js(\?v=\d+)?"></script>',
+        new_tag,
+        html,
+    )
+    if n and new_html != html:
+        try:
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(new_html)
+            print(f"   已更新 index.html data.js 版本号 ?v={ver}")
+        except Exception as e:
+            print(f"   更新 index.html 版本号失败: {e}")
+
+
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     # 使用北京时间(UTC+8)确定"今天"，避免云端 runner 默认 UTC 时区在凌晨 cron 时抓到前一天数据
@@ -355,6 +386,9 @@ def main():
         json.dump(all_data, f, ensure_ascii=False)
         f.write(";\n")
         f.write(f"window.LATEST_DATE = {json.dumps(max(all_data.keys()))};\n")
+
+    # 让看板以带版本号方式加载 data.js, 每次更新强制浏览器拉最新(避免缓存旧数据)
+    bump_index_html_version(max(all_data.keys()))
 
     print(f"\n完成! 当日 {len(records)} 个城市, 历史共 {len(all_data)} 天。")
 
