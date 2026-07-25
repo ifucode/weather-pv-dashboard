@@ -239,7 +239,7 @@ def fetch_city_once(prov, city, date_str):
     }
 
 
-def fetch_city(prov, city, date_str, retries=3):
+def fetch_city(prov, city, date_str, retries=5):
     """带重试的抓取; 全部失败返回 None(由 main 兜底填充)。"""
     last_err = None
     for attempt in range(1, retries + 1):
@@ -252,7 +252,7 @@ def fetch_city(prov, city, date_str, retries=3):
             last_err = e
             print(f"  尝试 {attempt}/{retries} 失败 {city}: {e}")
             if attempt < retries:
-                time.sleep(2 * attempt)
+                time.sleep(min(20, 2 ** attempt))  # 指数退避: 2/4/8/16/20s
     print(f"  {city} 全部重试失败: {last_err}")
     return None
 
@@ -268,38 +268,68 @@ def main():
     cities = read_cities()
     print(f"城市数量: {len(cities)}")
 
+    # 载入当天已存在的记录: 重跑时复用已成功(非stale)的数据, 避免把好的覆盖成差的
+    existing = {}
+    day_path = os.path.join(DATA_DIR, f"{date_str}.json")
+    if os.path.exists(day_path):
+        try:
+            with open(day_path, encoding="utf-8") as f:
+                for rec in json.load(f).get("records", []):
+                    existing[rec["city"]] = rec
+        except Exception:
+            pass
+
     records = []
+    got = set()
     for prov, city in cities:
+        # 当天已成功抓取过 -> 直接复用, 不重复请求(幂等, 不降级)
+        if city in existing and not existing[city].get("stale"):
+            rec = dict(existing[city])
+            records.append(rec)
+            got.add(city)
+            print(f"  复用 {city} (今日已成功, 跳过抓取)")
+            continue
         print(f"-> {prov} {city}")
         try:
             rec = fetch_city(prov, city, date_str)
             if rec:
                 records.append(rec)
+                got.add(city)
                 print(f"   OK  {rec['dominant_desc']}  发电效率 {rec['pv']['weather_efficiency_pct']}%  预计 {rec['pv']['energy_kwh_per_kwp']} kWh/kWp")
         except Exception as e:
             print(f"   失败: {e}")
         time.sleep(0.4)
 
-    # 失败兜底: 抓不到的城市, 用历史中最近一天的同城市数据补上, 保证城市不缺失
+    # 失败兜底: 抓不到的城市, 优先用当天已有记录(即便stale), 其次用历史最近一天, 保证城市不缺失
     prev = {}
     for fn in os.listdir(DATA_DIR):
-        if fn.endswith(".json") and fn != "all_data.json" and len(fn) == 15:
+        if fn.endswith(".json") and fn != "all_data.json" and len(fn) == 15 and fn != f"{date_str}.json":
             try:
                 with open(os.path.join(DATA_DIR, fn), encoding="utf-8") as f:
                     obj = json.load(f)
                 prev[obj["date"]] = obj["records"]
             except Exception:
                 pass
-    got = {r["city"] for r in records}
-    fallback_date = date_str if date_str in prev else (max(prev.keys()) if prev else None)
-    if fallback_date:
-        for rec in prev[fallback_date]:
-            if rec["city"] not in got:
-                rec = dict(rec)
-                rec["stale"] = True
-                rec["stale_from"] = fallback_date
-                records.append(rec)
-                print(f"   兜底填充 {rec['city']} (沿用 {fallback_date} 数据)")
+    for prov, city in cities:
+        if city in got:
+            continue
+        rec = None
+        if city in existing:
+            rec = dict(existing[city])            # 当天已有(可能是stale)
+        else:
+            fb = max(prev.keys()) if prev else None
+            if fb:
+                for r in prev[fb]:
+                    if r["city"] == city:
+                        rec = dict(r)
+                        break
+        if rec is not None:
+            rec = dict(rec)
+            rec["stale"] = True
+            rec["stale_from"] = rec.get("stale_from") or rec.get("date")
+            records.append(rec)
+            got.add(city)
+            print(f"   兜底填充 {city} (沿用 {rec['stale_from']} 数据)")
 
     # 保存当日文件
     day_file = os.path.join(DATA_DIR, f"{date_str}.json")
